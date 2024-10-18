@@ -21,9 +21,11 @@
 #include <cstdint>
 #include <cstring>
 #include <iosfwd>
+#include <memory>
 #include <new>
 #include <string>
 #include <type_traits>
+#include <utility>
 
 #include "absl/base/attributes.h"
 #include "absl/base/casts.h"
@@ -312,8 +314,14 @@ using GetTypeNameReturnType = absl::string_view;
 using GetTypeNameReturnType = std::string;
 #endif
 
+// Default empty string object. Don't use this directly. Instead, call
+// GetEmptyString() to get the reference. This empty string is aligned with a
+// minimum alignment of 8 bytes to match the requirement of ArenaStringPtr.
+PROTOBUF_EXPORT extern ExplicitlyConstructedArenaString
+    fixed_address_empty_string;
 
-PROTOBUF_EXPORT inline const std::string& GetEmptyStringAlreadyInited() {
+
+PROTOBUF_EXPORT constexpr const std::string& GetEmptyStringAlreadyInited() {
   return fixed_address_empty_string.get();
 }
 
@@ -1436,6 +1444,28 @@ template <typename T>
 PROTOBUF_DEPRECATE_AND_INLINE()
 T& DownCastToGenerated(MessageLite& from) {
   return DownCastMessage<T>(from);
+}
+
+// Overloads for `std::shared_ptr` to substitute `std::dynamic_pointer_cast`
+template <typename T>
+std::shared_ptr<T> DynamicCastMessage(std::shared_ptr<MessageLite> ptr) {
+  if (auto* res = DynamicCastMessage<T>(ptr.get())) {
+    // Use aliasing constructor to keep the same control block.
+    return std::shared_ptr<T>(std::move(ptr), res);
+  } else {
+    return nullptr;
+  }
+}
+
+template <typename T>
+std::shared_ptr<const T> DynamicCastMessage(
+    std::shared_ptr<const MessageLite> ptr) {
+  if (auto* res = DynamicCastMessage<T>(ptr.get())) {
+    // Use aliasing constructor to keep the same control block.
+    return std::shared_ptr<const T>(std::move(ptr), res);
+  } else {
+    return nullptr;
+  }
 }
 
 }  // namespace protobuf
